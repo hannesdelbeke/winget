@@ -6,7 +6,7 @@ from typing import Any
 import requests
 import yaml
 
-from src.winget.winget_manifests import Architecture, DefaultLocaleManifest_1_2_0, InstallMode, Installer, InstallerManifest_1_2_0, InstallerType, Locale, Scope, UpgradeBehavior, VersionManifest
+from winget.winget_manifests import Architecture, DefaultLocaleManifest_1_2_0, InstallMode, Installer, InstallerManifest_1_2_0, InstallerType, Locale, Scope, UpgradeBehavior, VersionManifest
 
 BASE_URI = "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests"
 BASIC_SEMVER_REGEX = re.compile(r'^\d+\.\d+\.\d+$')
