@@ -13,31 +13,56 @@ BASIC_SEMVER_REGEX = re.compile(r'^\d+\.\d+\.\d+$')
 
 __all__ = ["WinGetPackage", "WinGetPackageVersion"]
 
+
 class WinGetPackage:
     def __init__(self, id_) -> None:
         self.id = id_
         self.publisher, self.name = id_.split('.', maxsplit=1)
         self.api_url = f"{BASE_URI}/{id_[0].lower()}/{id_.replace('.','/')}"
-        self.versions = set()
-        self.find_versions()
+        self.versions = set()  # todo make property, shouldn't be publicly settable
         self.__package_versions = {}
 
+        self.find_versions()
 
-    def find_versions(self):
+    def __repr__(self) -> str:
+        """user-friendly console print of this instance. e.g. <WinGetPackage('Python.Python.3.8')>"""
+        return f"<{self.__class__.__name__}({self.id!r})>"
+
+    def find_versions(self) -> "typing.List[str]":
+        """get available versions from the winget repo"""
         if self.versions:
             return self.versions
-        r = requests.get(self.api_url)
-        json_res = r.json()
-        if "message" in json_res:
-            error_string = f"error getting versions\n{json.dumps(json_res, indent=2)}"
+
+        result = requests.get(self.api_url)
+        pkg_dict = result.json()
+        # [{'name': '3.8.0',
+        # 'path': 'manifests/p/Python/Python/3/8/3.8.0',
+        # 'sha': 'd90108796f3b3d413914975fe84c586effecdee8',
+        # 'size': 0,
+        # 'url': 'https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/p/Python/Python/3/8/3.8.0?ref=master',
+        # 'html_url': 'https://github.com/microsoft/winget-pkgs/tree/master/manifests/p/Python/Python/3/8/3.8.0',
+        # 'git_url': 'https://api.github.com/repos/microsoft/winget-pkgs/git/trees/d90108796f3b3d413914975fe84c586effecdee8',
+        # 'download_url': None,
+        # 'type': 'dir',
+        # '_links': {'self': 'https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/p/Python/Python/3/8/3.8.0?ref=master',
+        # 'git': 'https://api.github.com/repos/microsoft/winget-pkgs/git/trees/d90108796f3b3d413914975fe84c586effecdee8',
+        # 'html': 'https://github.com/microsoft/winget-pkgs/tree/master/manifests/p/Python/Python/3/8/3.8.0'}},
+        #
+        # {'name': ... }, ...]
+
+        if "message" in pkg_dict:
+            error_string = f"error getting versions\n{json.dumps(pkg_dict, indent=2)}"
             raise ValueError(error_string)
-        self.versions = set([f["name"] for f in json_res if f["type"] == "dir"])
+
+        self.versions = set([f["name"] for f in pkg_dict if f["type"] == "dir"])
         return self.versions
 
-    def get_latest_version(self):
+    def get_latest_version(self) -> "WinGetPackageVersion":
         return self[get_latest_semver(self.versions)]
 
-    def __getitem__(self, indices):
+    def __getitem__(self, indices) -> "WinGetPackageVersion":
+
+        # validate input
         # if not isinstance(indices, tuple):
         # print(indices)
         if not self.versions:
@@ -46,13 +71,23 @@ class WinGetPackage:
             raise TypeError(f"Arguments to {WinGetPackage.__getitem__.__qualname__} must be Strings not {type(indices)}.")
         if indices not in self.versions:
             return KeyError(f"{indices} not found in {self.__class__.__name__}.versions.")
+
+        # return if cached
         if indices in self.__package_versions:
             return self.__package_versions[indices]
-        wgpv = WingetPackageVersion(self.id, indices)
-        self.__package_versions[indices] = wgpv
+
+        wgpv = WinGetPackageVersion(self.id, indices) # create package
+        self.__package_versions[indices] = wgpv  # cache it
         return wgpv
 
-class WingetPackageVersion:
+    def get(self, indices, default=None) -> "WinGetPackageVersion":
+        try:
+            return self[indices]
+        except KeyError:
+            return default
+
+
+class WinGetPackageVersion:
     def __init__(self, id_: str, version: str) -> None:
         self.id = id_
         self.version = version
@@ -67,6 +102,10 @@ class WingetPackageVersion:
         self.installer_manifest = None
 
         self.__get_api_contents()
+
+    def __repr__(self) -> str:
+        """user-friendly console print of this instance. e.g. <WinGetPackageVersion('Python.Python.3.8': '3.8.10')>"""
+        return f"<{self.__class__.__name__}({self.id!r}: {self.version!r})>"
 
     def __get_api_contents(self):
         if self.api_contents:
